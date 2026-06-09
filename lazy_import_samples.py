@@ -20,3 +20,8 @@ clipboard = lazy_import("clipboard")
 
 pandas = lazy_import("pandas")
 plt = lazy_import("matplotlib.pyplot", "matplotlib")
+
+
+
+WordCloud = lazy_import("wordcloud.WordCloud", "wordcloud")
+
