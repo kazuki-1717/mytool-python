@@ -1,1203 +1,1062 @@
-﻿# -*- coding: UTF-8 -*-
+PROGRAM_VERSION = "3.2.0 2026-03-28"
 
-MYTOOL_PROGRAMMER	= "ふうき"
-MYTOOL_VERSION		= {2, 4, 3}
+# == library ==
 
+from lazy_import import *
 
-##### Libraries #####
-
-import os;
-import fnmatch;
-import importlib.util;
-import time;
-import _io;
-
-from math import *;
-
-# Install library in use
-
-libOpencv2 = None;
-libPilImage = None;
-libNumpy = None;
-
-libGoogleTranslator = None;
-
-libYoutube = None;
-libAudioSegment = None;
-
-def CheckLibrary(libraryName: str) -> bool:
-	spec = importlib.util.find_spec(libraryName);
-	return spec is not None;
+import os
+import _io
+import fnmatch
+import time
+from threading import Thread
 
 
-def InstallLibrary(libraryName: str) -> bool:
-	if (not hasattr(InstallLibrary, "installCommands")):
-		InstallLibrary.installCommands = ["py -m pip", "pip"];
-	
-	# Execute command -> try another command
-	while (InstallLibrary.installCommands):
-		if (os.system("%s install %s" % (InstallLibrary.installCommands[0], libraryName))):
-			InstallLibrary.installCommands.pop(0);
-			continue;
+# load when use
 
-		return True;
-	
-	# ERROR: No command to call 'pip'
-	print("ERROR: InstallLibrary: Couldn't found 'pip'");
-	return False;
+cv2 = lazy_import("cv2", "opencv-python")
+pil_image = lazy_import("PIL.Image", "Pillow")
+numpy = lazy_import("numpy")
 
+pytube = lazy_import("pytube", upgrade = True)
+pydub = lazy_import("pydub", ["ffmpeg", "pydub"])
 
-def __Loads(modu, installs: dict) -> int:
-	if (modu != None):
-		return 1;
-	
-	for item in installs.items():
-		if (not CheckLibrary(item[0]) and not InstallLibrary(item[1])):
-			return 0;
-	
-	return 2;
+tkinter_filedialog = lazy_import("tkinter.filedialog", "tkinter")
 
+googletrans = lazy_import("googletrans", "googletrans==4.0.0rc1")
+translator = None;
 
-def __LoadOpencv2():
-	global libOpencv2;
-	ret = __Loads(libOpencv2, {"cv2": "opencv-python"});
-	
-	if (ret == 1):
-		return libOpencv2;
-	if (ret == 2):
-		import cv2;
-		libOpencv2 = cv2;
-		return libOpencv2;
-		
-	return None;
+clipboard = lazy_import("clipboard")
 
-def __LoadGoogleTranslate():
-	global libGoogleTranslator;
-	ret = __Loads(libGoogleTranslator, {"googletrans": "googletrans==4.0.0rc1"});
-	
-	if (ret == 1):
-		return libGoogleTranslator;
-	if (ret == 2):
-		import googletrans;
-		libGoogleTranslator = googletrans.Translator();
-		return libGoogleTranslator;
-		
-	return None;
-
-def __LoadPIL_Image():
-	global libPilImage;
-	ret = __Loads(libPilImage, {"PIL": "pillow"});
-	
-	if (ret == 1):
-		return libPilImage;
-	if (ret == 2):
-		from PIL import Image;
-		libPilImage = Image;
-		return libPilImage;
-		
-	return None;
-
-def __LoadNumpy():
-	global libNumpy;
-	ret = __Loads(libNumpy, {"numpy": "numpy"});
-	
-	if (ret == 1):
-		return libNumpy;
-	if (ret == 2):
-		import numpy;
-		libNumpy = numpy;
-		return libNumpy;
-		
-	return None;
-
-def __LoadlibYoutube():
-	global libYoutube;
-	ret = __Loads(libYoutube, {"pytubefix": "pytubefix"});
-	
-	if (ret == 1):
-		return libYoutube;
-	if (ret == 2):
-		from pytubefix import YouTube;
-		libYoutube = YouTube;
-		return libYoutube;
-		
-	return None;
-
-def __LoadPydub():
-	global libAudioSegment;
-	ret = __Loads(libAudioSegment, {"pydub": "pydub", "ffmpeg": "ffmpeg"});
-	
-	if (ret == 1):
-		return libAudioSegment;
-	if (ret == 2):
-		import pydub;
-		libAudioSegment = pydub.AudioSegment;
-		return libAudioSegment;
-		
-	return None;
+pd = lazy_import("pandas")
+plt = lazy_import("matplotlib.pyplot", "matplotlib")
 
 
 
-##### Constants #####
+# == constants ==
 
-# Environment
-
-IS_WIN: bool = os.name == "nt";
-
-
-# Terminal Color
+IS_WIN: bool = os.name == "nt"
 
 if (IS_WIN):
-	os.system("color");
+	os.system("color")
 
-TERMCOLOR_CLEAR: str = "\033[0m";
 
-TERMCOLOR_RED: str = "\033[31m";
-TERMCOLOR_GREEN: str = "\033[32m";
-TERMCOLOR_YELLOW: str = "\033[33m";
-TERMCOLOR_BLUE: str = "\033[34m";
+TERMCOLOR_CLEAR: str = "\033[0m"
 
-TERMCOLOR_BOLD: str = "\033[1m";
+TERMCOLOR_RED: str = "\033[31m"
+TERMCOLOR_GREEN: str = "\033[32m"
+TERMCOLOR_YELLOW: str = "\033[33m"
+TERMCOLOR_BLUE: str = "\033[34m"
+
+TERMCOLOR_BOLD: str = "\033[1m"
 TERMCOLOR_GRAY: str = "\x1b[2m"
 
 
 
-# Constant Time
 
-DAY:	int = 24 * 60;
-HOUR:	int = 60;
+# == ask_file ==
 
+def ask_file(file_types: list[tuple[str, str]] = [("All Files", "*")]) -> str:
+	"provide user to select file by explorer, return file path in success, throw exception in failed"
 
-# Other
-
-true: bool = True;
-false: bool = False;
-
-
-# Methods
-
-METHODCOLOURS = [
-	TERMCOLOR_GREEN,
-	TERMCOLOR_BOLD + TERMCOLOR_YELLOW,
-	TERMCOLOR_BOLD + TERMCOLOR_BLUE,
-	TERMCOLOR_YELLOW,
-	TERMCOLOR_BOLD + TERMCOLOR_GREEN,
-	TERMCOLOR_BLUE,
-	"",
-	"\x1b[2m",
-	TERMCOLOR_RED,
-];
-
-METHOD_CLASS	= 0;
-METHOD_FUNCTION	= 1;
-METHOD_STRUCTURE= 2;
-METHOD_STRING	= 3;
-METHOD_NUMBER	= 4;
-METHOD_BOOL		= 5;
-METHOD_NORMAL	= 6;
-METHOD_NONE		= 7;
-METHOD_ERROR	= 8;
-
-
-
-##### Commands #####
-
-class ClassClearScreen:
-	def __repr__(self):
-		self.Clear();
-		return "";
-	def __call__(self):
-		self.Clear();
+	file = tkinter_filedialog.askopenfilename(filetypes = file_types)
+	if (file == None):
+		raise Exception("No file chosen!")
 	
-	def Clear(self):
-		if (IS_WIN):
-			os.system("cls");
-		else:
-			print("\x1b[2J\x1b[0;0H", end="");
-		return "";
+	return file
 
-class ClassChangeDirectory:
+
+
+# == OS / terminal ==
+
+is_file = os.path.isfile
+is_dir = os.path.isdir
+
+
+class clear_t:
+    def __repr__(self):
+        self.clear()
+        return ""
+    def __call__(self):
+        self.clear()
+    
+    def clear(self):
+        if (IS_WIN):
+            os.system("cls")
+        else:
+            print("\x1b[2J\x1b[00H", end = "")
+        return ""
+
+cls = CLS = clear = CLEAR = clear_t()
+
+
+
+class chdir_t:
+    def __repr__(self):
+        return os.getcwd()
+    def __call__(self, path = ""):
+        self.set(path)
+
+    def set(self, path = ""):
+        if (not path):
+            return
+        try:
+            os.chdir(path)
+        except FileNotFoundError:
+            print("ERROR: chdir: Couldn't find path!")
+
+cd = chdir = chdir_t()
+
+
+
+class list_dir_t:
 	def __repr__(self):
-		return os.getcwd();
+		self.listdir()
+		return ""
 	def __call__(self, path = ""):
-		self.set(path);
+		self.listdir(path)
 
-	def set(self, path = ""):
-		if (not path):
-			return;
-		try:
-			os.chdir(path);
-		except FileNotFoundError:
-			print("ERROR: Cwd: Couldn't find path!");
+	def listdir(self, path = ""):
+		os.system(("dir " if IS_WIN else "ls ") + ('"' + path + '"' if (path) else ""))
 
-class ClassListDirectory:
+ls = list_dir = list_dir_t()
+
+
+
+
+class list_tree_t:
 	def __repr__(self):
-		self.Listdir();
-		return "";
-	def __call__(self, path = ""):
-		self.Listdir(path);
+		self.list_tree()
+		return ""
 
-	def Listdir(self, path = ""):
-		os.system(("dir " if IS_WIN else "ls ") + ('"' + path + '"' if (path) else ""));
+	def __call__(self, top = os.curdir, patterns = ("*")):
+		self.list_tree(top, patterns)
 
-
-def ListTree(top = os.curdir, patterns = ("*")):
-	topLength = len(top);
-	
-	for r, ds, fs in os.walk(top):
-		totalSpace = r[topLength:].count(os.sep);
+	def list_tree(top = os.curdir, patterns = ("*")):
+		topLength = len(top)
 		
-		files = [fn for pattern in patterns for fn in fnmatch.filter(fs, pattern)];
-		
-		if (files and r != top):
-			print(TERMCOLOR_BOLD + r[topLength+1:] + os.sep + TERMCOLOR_CLEAR);
-		
-		for fn in files:
-			print("\t" * totalSpace + fn);
+		for r, ds, fs in os.walk(top):
+			totalSpace = r[topLength:].count(os.sep)
+			
+			files = [fn for pattern in patterns for fn in fnmatch.filter(fs, pattern)]
+			
+			if (files and r != top):
+				print(f"\x1b[1m{r[topLength+1:]}{os.sep}\x1b[0m")
+			
+			for fn in files:
+				print("\t" * totalSpace + fn)
 
-def Touch(files: str, *others: list[str]):
+
+list_tree = list_tree_t()
+
+
+
+def touch(files: str, *others: list[str]):
 	# Touch files input by multi-line or path split text
 	for filename in [fn for fn in files.split('\n') for fn in fn.split(os.pathsep)]:
 		if (filename and not os.path.exists(filename)):
-			open(filename, "x");
+			open(filename, "x")
 	
 	# Touch files input by multi-args
 	for filename in others:
 		if (filename and type(filename) == str and not os.path.exists(filename)):
-			open(filename, "x");
+			open(filename, "x")
 
 
-cls = CLS = clear = CLEAR = ClassClearScreen();
 
-cd = CD = cwd = CWD = chdir = CHDIR = ClassChangeDirectory();
+# ==== video ====
 
-ls = LS = listdir = LISTDIR = ClassListDirectory();
+# == load ==
 
-
-##### Ask Open File #####
-
-def AskOpenFile(fileTypes: list = [tuple[str, str]]):
-	from tkinter import filedialog;
-	return filedialog.askopenfile(filetypes = fileTypes);
-
-
-##### Images Methods #####
-
-def LoadImage(filename: str):
-	__LoadOpencv2();
-	return libOpencv2.imread(filename);
-
-
-def ShowImage(image = None, size: list[int, int] = [0, 720], windowName: str = "imshow", wait: int = 0):
-	"""Show Image and wait untail window closed
+def load_video(object = None):
+	"""load video by different type
 	
-	@param image : Image input for show it to window, you can enter file path, PIL Image or Opencv Image.
-	@param windowName : Preview window name (default: "imshow")
-	@param wait : How long to show image (default: 0)
-	
+	- object (cv2.VideoCapture) : return object
+	- object (str) : load video from object
+	- object (None) : provide explorer to select video file and load it
 	"""
-	__LoadOpencv2();
+	object_type = type(object)
 
-	# Different Image Format Supports
-	if (type(image) == str):
-		if (not os.path.isfile(image)):
-			print("ERROR: ShowImage: File not exists!");
-			return;
+	if (object_type == cv2.VideoCapture):
+		return object
+
+	if (object_type == str):
+		return cv2.VideoCapture(object)
+
+	if (object == None):
+		return cv2.VideoCapture(ask_file([("Video files", "*.mp4 *.webm *.avi *.mov *.wmv *.flv"), ("All files", "*.*")]))
+
+	raise Exception(f"invalid input type {object_type.__name__}")
+
+
+# == get ==
+
+def get_video_pos(video) -> int:
+    return int(video.get(1))
+
+def get_video_width(video) -> int:
+    return int(video.get(3))
+
+def get_video_height(video) -> int:
+    return int(video.get(4))
+
+def get_video_fps(video) -> float:
+    return video.get(5)
+
+def get_video_duration(video) -> int:
+    return 1000 // video.get(5)
+
+get_video_rate = get_video_duration		# alias
+
+
+# == check ==
+
+def is_vaild_video(video) -> bool:
+    return type(video) == cv2.VideoCapture and video.isOpened()
+
+
+# == set ==
+
+def set_video_pos(video, position: int):
+	if (not is_vaild_video(video)):
+		print("set_video_pos: not a video variable!")
+		return
+	
+	video.set(1, int(position))
+
+
+# == play ==
+
+def play_video(video = None, window_name: str = "play_video", fullscreen: bool = False, loop: bool = True):
+    video = load_video(video)
+    if (video == None):
+        return
+
+    video.set(1, 0)
+
+    V_WIDTH = get_video_width(video)
+    V_HEIGHT = get_video_height(video)
+    V_FRAME_COUNT = video.get(7)
+
+    V_FPS = get_video_fps(video)
+    V_DURATION = get_video_duration(video)
+
+    cv2.namedWindow(window_name,
+        cv2.WINDOW_FULLSCREEN if fullscreen else cv2.WINDOW_NORMAL
+    )
+    cv2.resizeWindow(window_name, V_WIDTH, V_HEIGHT)
+
+
+    screenshot_number = 1
+    while (os.path.isfile(f"screenshot-{screenshot_number}.png")):
+        screenshot_number += 1
+
+
+    playing = True
+
+    ret = False
+    frame = None
+    now = -1
+
+    while (True):
+        start = cv2.getTickCount()
 		
-		image = libOpencv2.imread(image);
-	
-	if (image == None):
-		file = AskOpenFile([("Image Files", "*.png *.jpg *jpeg *.webp *.ico")]);
-	
-		if (not file):
-			return;
-	
-		image = LoadImage(file.name);
-		file.close();
-	
-	className = type(image).__module__ + '.' + type(image).__name__;
-	if (className[:4] == "PIL."):
-		__LoadNumpy();
-		image = libOpencv2.cvtColor(libNumpy.array(image.convert('RGB')), libOpencv2.COLOR_RGB2BGR);		# double convert since libPilImage not support to convert to BGR format.
-	
-	className = type(image).__module__ + '.' + type(image).__name__;
-	if (className != "libNumpy.ndarray"):
-		print("ERROR: ShowImage: Couldn\'t show \'" + className + "\'");
-		return;
+        if (playing or not ret):
+            ret, frame = video.read()
+            now += 1
 
-	# Show
-	w = image.shape[0]; h = image.shape[1];
-	
-	if (size[0] != 0 and w > size[0]):
-		h = h * size[0] / w;
-		w = size[0];
-	if (size[1] != 0 and h > size[1]):
-		w = w * size[1] / h;
-		h = size[1];
-	
-	image_scaled = libOpencv2.resize(image, (int(w), int(h)));
-	libOpencv2.imshow(windowName, image_scaled);
-	libOpencv2.waitKey(wait);
+            if (ret == False):
+                if (loop == True):
+                    video.set(1, 0)
+                else:
+                    video.set(1, V_FRAME_COUNT - 1)
+            
+                ret, frame = video.read()
+
+            cv2.imshow(window_name, frame)
+
+        end = cv2.getTickCount()
 
 
-##### Video Methods #####
+		# delay_time around 1 to V_DURATION, calculate by V_DURATION - used_time
+        used_time = (end - start) / 1e6
+        delay_time = int(max(1, min(V_DURATION, V_DURATION - used_time)))
 
-def LoadVideo(filename: str):
-	__LoadOpencv2();
+        key = cv2.waitKeyEx(delay_time)
 
-	video = libOpencv2.VideoCapture(filename);
-	if (video.isOpened()):
-		return video;
+        # == exit handle ==
 
-	print("ERROR: LoadVideo: Failed to load video!");
-	video.release();
-	return None;
+        try:		# User closed window : Quit out
+            cv2.getWindowProperty(window_name, 0)
+        except:
+            print(f"NOTE: play_video: ウィンドウ {window_name} を閉じる!")
+            break
+
+        if (key == 27):
+            break
+
+        # == option ==
+
+        if (key == ord('t')):	# T : Take photo
+            filename = f"screenshot-{screenshot_number}.png"
+            screenshot_number += 1
+
+            cv2.imwrite(filename, frame)
+            print(f"NOTE: play_video: Screenshot saved to {filename}")
+            continue
+        
+        if (key == ord(' ')):	# SPACE : Switch playing
+            playing = not playing
+            if (playing == True and video.get(1) == V_FRAME_COUNT):
+                video.set(1, 0)
+            continue
+        
+        if (key == ord('l')):
+            loop = not loop
+            print("NOTE: play_video: Loop play is " + ("enable" if (loop) else "disable") + " now!")
+            if (loop == True and playing == False):
+                playing = True
+            continue
+        
+        if (key == 0x7a0000):
+            fullscreen = not fullscreen
+            cv2.setWindowProperty(window_name,
+                cv2.WND_PROP_FULLSCREEN, (cv2.WINDOW_FULLSCREEN if fullscreen else 0)
+            )
+            continue
+
+        # == move ==
+
+        if (key >= ord('0') and key <= ord('9')):
+            offset = V_FRAME_COUNT / 10 * (key - ord('0'))
+        
+        # 'A' : Move back 5 seconds
+        elif (key == ord('a')):
+            offset = now - V_FPS * 5 - 1
+        
+        # 'D' : Move front 5 seconds
+        elif (key == ord('d')):
+            offset = now + V_FPS * 5
+        
+        # ',' : Move back frame
+        elif (key == ord(',')):
+            offset = now - 1
+        
+        # '.' : Move front frame
+        elif (key == ord('.')):
+            offset =  now + 1
+        else:
+            continue
+
+        offset = round(max(0, min(offset, V_FRAME_COUNT - 1)))
+        now = offset
+        video.set(1, offset)
+        
+        # Flush Frame after offset moved
+        ret, frame = video.read()
+        cv2.imshow(window_name, frame)
 
 
-def IsVaildVideo(video, errorFuncName: str = None) -> bool:
-	"""if video vaild, return True. if no, return False.
-	Giving errorFuncName will print error message if video invalid.
-	"""
 
-	if (type(video) != libOpencv2.VideoCapture):
-		if (errorFuncName):
-			print("ERROR: %s: %s is not a valid type." % [errorFuncName, type(video).__name__]);
-		return False;
-	if (not video.isOpened()):
-		if (errorFuncName):
-			print("ERROR: %s: Invalid video." % [errorFuncName]);
-		return False;
-	return True;
+# == to ==
 
+def to_cv2_image_list(video):
+	video = load_video(video)
 
-def ShowVideoCurrentFrame(video, windowName):
-	"No debug including"
-
-	ret, frame = video.read();
-
-	if (ret):
-		libOpencv2.imshow(windowName, frame);
-		video.set(1, video.get(1) - 1);
-
-	return ret, frame;
-
-
-def PlayVideo(video = None, windowName: str = "imshow",
-				maxWidth: int = 1920, maxHeight: int = 1080,
-				pause: bool = False, loop: bool = False,
-				fullscreen: bool = False, output: str = "output-"):
-	__LoadOpencv2();
-
-	destroyVideo = False;
-
-	# Video input as filename: Load video
-	if (type(video) == str):
-		video = libOpencv2.VideoCapture(video);
-		destroyVideo = True;
-	
-	# No video input: Ask for Load video
-	if (video == None):
-		from tkinter import filedialog;
-		file = AskOpenFile([("Video files", "*.mp4 *.webm *.avi *.mov *.wmv *.flv"), ("All files", "*.*")]);
-	
-		if (not file):
-			print("Quit PLayVideo: No file chosen!");
-			return;
-
-		video = libOpencv2.VideoCapture(file.name);
-		file.close();
-		destroyVideo = True;
-	
-	# Ivalid video: Print error and quit
-	if (not IsVaildVideo(video, "PlayVideo")):
-		return;
-
-	# Reset video
-	video.set(1, 0);
-
-	# Get Video Information
-	videoWidth = video.get(3);
-	videoHeight = video.get(4);
-	videoTotalFrames = video.get(7);
-
-	videoFPS = video.get(5);
-	videoDelay = int(1000 / videoFPS);
-
-	# Callback function to keep window ratio
-	def ResizeCallback(event, x, y, flags, param):
-		libOpencv2 = param['libOpencv2'];
-		windowName = param['windowName'];
-
-		if event != libOpencv2.EVENT_MOUSEMOVE:
-			# Get the new window size
-			new_width = libOpencv2.getWindowImageRect(windowName)[2];
-			new_height = int(new_width * param['ratio']);
-			
-			# Display the resized image
-			libOpencv2.resizeWindow(windowName, (new_width, new_height));
-
-	# Create Window
-	if (videoWidth > maxWidth):
-		videoWidth = maxWidth;
-		videoHeight = videoHeight * (maxWidth / videoWidth);
-	elif (videoWidth < maxWidth):
-		videoWidth = videoWidth * (maxHeight / videoHeight);
-		videoHeight = maxHeight;
-	
-	libOpencv2.namedWindow(windowName, (libOpencv2.WINDOW_FULLSCREEN if fullscreen else libOpencv2.WINDOW_NORMAL));
-	libOpencv2.resizeWindow(windowName, int(videoWidth), int(videoHeight));
-	libOpencv2.setMouseCallback(windowName, ResizeCallback, {'windowName': windowName, 'ratio': videoHeight / videoWidth, 'libOpencv2': libOpencv2});
-
-	# Take Photo Variable
-	outputIndex = 1;
-	while (os.path.isfile(output + str(outputIndex) + ".png")):
-		outputIndex += 1;
-
-	# Play Video
-	playing = not pause;
-	frame: None;
-
-	startTick = libOpencv2.getTickCount();
-	endTick = 0;
-	tickOfMS = libOpencv2.getTickFrequency() / 1000;
-
+	frames = []
 	while (True):
-		try:
-			if (playing):
-				ret, frame = ShowVideoCurrentFrame(video, windowName);
-
-				if (ret == False):
-					if (loop == False):
-						playing = False;
-						continue;
-					
-					video.set(1, 0);
-					ShowVideoCurrentFrame(video, windowName);
-
-			# Delay
-			endTick = libOpencv2.getTickCount();
-			key = libOpencv2.waitKeyEx(int(videoDelay - min(videoDelay - 1, (endTick - startTick) / tickOfMS)));
-			startTick = endTick;
-
-			# Handle Event
-
-			try:		# User closed window : Quit out
-				libOpencv2.getWindowProperty(windowName, 0);
-			except:
-				print("Quit PlayVideo: Window chosed!");
-				break;
-			if (key == 27):			# ESC : Quit out
-				print("Quit PlayVideo: ESC presed!");
-				break;
-
-			if (key == ord('t')):	# T : Take photo
-				filename = output + str(outputIndex) + ".png";
-
-				libOpencv2.imwrite(filename, frame);
-				print("PlayVideo: Photo saved to " + filename);
-
-				outputIndex += 1;
-				continue;
-			if (key == ord(' ')):	# SPACE : Switch playing
-				playing = not playing;
-				if (playing == True and video.get(1) == videoTotalFrames):
-					video.set(1, 0);
-				continue;
-			if (key == ord('l')):
-				loop = not loop;
-				print("PlayVideo: Loop play is " + ("enable" if (loop) else "disable") + " now!");
-				if (loop == True and playing == False):
-					playing = True;
-				continue;
-			if (key == 0x7a0000):
-				fullscreen = not fullscreen;
-				libOpencv2.setWindowProperty(windowName, libOpencv2.WND_PROP_FULLSCREEN, (libOpencv2.WINDOW_FULLSCREEN if fullscreen else 0));
-				continue;
-
-			# Move offset
-			offset = 0;
-
-			if (key >= ord('0') and key <= ord('9')):
-				offset = videoTotalFrames / 10 * (key - ord('0'));
-			
-			# 'A' : Move back 5 seconds
-			elif (key == ord('a')):
-				offset = video.get(1) - videoFPS * 5 - 1;
-			
-			# 'D' : Move front 5 seconds
-			elif (key == ord('d')):
-				offset = video.get(1) + videoFPS * 5;
-			
-			# ',' : Move back frame
-			elif (key == ord(',')):
-				offset = video.get(1) - 2;
-			
-			# '.' : Move front frame
-			elif (key == ord('.')):
-				offset = -1;
-			else:
-				continue;
-
-			if (offset != -1):
-				offset = round(max(0, min(offset, videoTotalFrames)));
-				video.set(1, offset);
-
-				if (offset != video.get(1)):
-					print("ERROR: PlayVideo: Failed to move frame position (%d was expected but finally %d)" % (int(offset), int(video.get(1))));
-			
-			# Flush Frame after offset moved
-			if (playing == False):
-				ret, frame = ShowVideoCurrentFrame(video, windowName);
-		except KeyboardInterrupt:
-			print("Quit PlayVideo: CTRL+C interrupt");
-			break;
-	
-	# Sure the window has closed
-	try:
-		libOpencv2.destroyWindow(windowName);
-	except:
-		pass;
-	
-	if (destroyVideo):
-		video.release();
-
-
-##### GIF Methods #####
-
-def WriteGifFromFrames(frames: list, filename: str, duration: int, loop: int = 0):
-	frames[0].save(filename, save_all=True, append_images=frames[1:], duration=duration, loop=loop);
-
-
-def WriteGifFromVideo(video, filename: str, start: float = 0, end: float = -1, loop: int = 0):
-	__LoadOpencv2();
-	__LoadPIL_Image();
-
-	if (not IsVaildVideo(video, "WriteGifFromVideo")):
-		return;
-	
-	FPS = video.get(5);
-	
-	index = start * FPS;
-	
-	finallyFrame = 0;
-	if (end == -1):
-		finallyFrame = video.get(7);
-	else:
-		finallyFrame = end * FPS;
-	
-	
-	video.set(1, index);
-	frames = [];
-	
-	while (True):
-		ret, frame = video.read();
-	
+		ret, frame = video.read()
 		if (ret == False):
-			break;
+			break
+		frames.append(frame)
+	return frames
+
+def to_pil_image_list(video):
+	video = load_video(video)
+
+	frames = []
+	while (True):
+		ret, frame = video.read()
+		if (ret == False):
+			break
+		frames.append(to_pil_image(frame))
+	return frames
+
+
+
+
+
+
+# == write ==
+
+def write_mp4(object, output: str, fps: float, width: int, height: int):
+	def convert_thread(video, output: str, fps: float, width: int, height: int):
+		writer = cv2.VideoWriter(output, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+
+		orignal_pos = get_video_pos(video)
+		set_video_pos(video, 0)
 	
-		frames.append(libPilImage.fromarray(libOpencv2.cvtColor(frame, libOpencv2.COLOR_BGR2RGB)));
-		index += 1;
+		while (True):
+			ret, frame = video.read()
+			if (ret == False):
+				break
+
+			if (frame.shape != (height, width, 3)):
+				frame = cv2.resize(frame, (width, height))
+			
+			writer.write(frame)
+
+		writer.release()
+		set_video_pos(video, orignal_pos)
+
+	video: None
+	if (type(object) == cv2.VideoCapture):
+		video = object
+	elif (type(object) == str):
+		video = cv2.VideoCapture(object)
+	else:
+		video = cv2.VideoCapture(ask_file([("Video files", "*.mp4 *.webm *.avi *.mov *.wmv *.flv"), ("All files", "*.*")]))
+
+	Thread(target = convert_thread, args = [video, output, fps, width, height]).start()
+	print("INFO: start writing " + output + " convertion!")
+
+
+
+
+
+
+# ==== image ====
+
+# == is ==
+
+def is_pil_image(image):
+	type_image = type(image)
+	return type_image.__name__.find("PIL.", 0, 0) == 0 and type_image.__name__.find("Image") != -1
+
+
+
+# == convert ==
+
+def to_cv2_image(image):
+	numpy_img = numpy.array(image)
+	return cv2.cvtColor(numpy_img, cv2.COLOR_RGB2BGR)
+
+def to_pil_image(image):
+	frame_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+	return pil_image.fromarray(frame_rgb)
+
+
+
+# == load ==
+
+def load_cv2_image(object: str|None = None):
+	object_type = type(object)
+	if (object_type.__name__ == "numpy.ndarray"):
+		return object
+
+	if (object_type == str):
+		return cv2.imread(object)
+
+	if (is_pil_image(object)):
+		return to_cv2_image(object)
+
+	if (object == None):
+		return cv2.imread(ask_file([("Image file", ".png *jpg *.jpeg *.ico"), ("All files", "*.*")]))
+
+	raise Exception(f"invaild type {object_type.__name__}!")
+
+
+
+def get_image_size(image) -> tuple[int, int]:
+	if (is_pil_image(image)):
+		return image.size
+
+	image = load_cv2_image(image)
+	return [image.shape[1], image.shape[0]]
+
+
+def show_image(file: str|None = None, window_name: str = "imshow"):
+	cv2.imshow(window_name, load_cv2_image(file))
+
+
+
+
+# == GIF ==
+
+def write_gif(object: list|str, output: str, duration: int = 0, loop: int = 0):
+	# == convert object to pil_image list ==
+
+	frames = []
+	object_type = type(object)
+
+	if (object_type == str and is_file(object)):
+		video = load_video(object)
+		frames = to_pil_image_list(video)
+
+		if (duration == 0):
+			duration = get_video_duration(video)
 	
-		if (index >= finallyFrame):
-			break;
-	
-	WriteGifFromFrames(frames, filename, 1000 / FPS, loop = loop);
+	elif (object_type == str and is_dir(object)):
+		if (duration == 0):
+			raise TypeError("missing 1 required positional argument: 'duration'")
+
+		for file in os.listdir(object):
+			if (file.rsplit(os.extsep, 1)[1] not in ("png", "jpg", "jpeg")):
+				continue
+			
+			frames.append(pil_image.open(object + os.sep + file))
+
+	elif (object_type == str):
+		raise FileNotFoundError(f"{object} not exist")
+
+	elif (object_type == list):
+		if (duration == 0):
+			raise TypeError("missing 1 required positional argument: 'duration'")
+
+		for frame in object:
+			if (type(frame).__name__ == "numpy.ndarray"):
+				frames.append(to_pil_image(frame))
+				continue
+		
+			frames.append(frame)
+
+	elif (object_type == cv2.VideoCapture):
+		if (duration == 0):
+			duration = get_video_duration(object)
+
+		frames = to_pil_image_list(object)
+
+	else:
+		raise Exception(f"Invalid object type {object_type.__name__}")
+
+
+	# == write ==
+
+	def write_gif_thread(output, frames, duration, loop):
+		frames[0].save(output, save_all=True, append_images=frames[1:], duration=duration, loop=loop)
+
+	Thread(target = write_gif_thread, args=[output, frames, int(duration), loop]).start()
+	print(f"INFO: start writing {output}")
 
 
 
-##### Attendence #####
+# ==== audio ====
 
-class Attendance:
-	class Row:
+def write_mp3(file: str, output: str):
+    def write_mp3_thread(file, dest):
+        audio = pydub.AudioSegment.from_file(file)
+        audio.export(dest, format = "mp3")
+
+    Thread(target = write_mp3_thread, args = [file, output]).start()
+    print(f"INFO: start writing {output}")
+
+
+def download_youtube(url: str, dl_type: str = "video"):
+	def rate_stream(stream, dl_type: str) -> int:
+		quality_str: str = None
+		if (dl_type == "audio"):
+			quality_str = stream.abr
+		else:
+			quality_str = stream.resolution
+
+		if (not quality_str):
+			return 0
+
+		quality_str = ''.join([ch for ch in quality_str if (ch.isdigit())])
+		return int(quality_str)
+
+	def work_thread(url, dl_type: str = "video"):
+		# == download ==
+
+		video_urls = []
+
+		if (url.find("https://www.youtube.com/playlist", 0) == 0):
+			playlist = pytube.Playlist(url)
+			video_urls = playlist.urls
+		
+			print(f"NOTE: download_youtube: プレイリスト {url} のダウンロードを始める")
+		
+		else:
+			video_urls.append(url)
+			print(f"NOTE: download_youtube: {dl_type} {url} のダウンロードを始める")
+		
+
+		success_count = 0
+
+		for video_url in video_urls:
+			try:
+				yt = pytube.YouTube(video_url)
+				adjusted_title = yt.title[:20]
+			except:
+				print(f"ERROR: download_youtube: {dl_type} {url} ダウンロードに失敗しました!")
+				continue
+			
+
+			best_stream = None
+			best_score = 0
+
+			for stream in yt.streams:
+				score = rate_stream(stream)
+
+				if (score > best_score):
+					best_stream = stream
+					best_score = score
+
+			if (best_stream == None):
+				print(f"ERROR: download_youtube: {dl_type} {adjusted_title} に最適なストリームが見つかりませんでした!")
+				continue
+
+			file = best_stream.download()
+
+			if (dl_type == "audio"):
+				try:
+					audio = pydub.AudioSegment.from_file(file)
+				except:
+					print(f"ERROR: download_youtube: {adjusted_title} の MP3 変換に失敗しました!")
+					continue
+				
+				audio.export(file.rsplit(os.extsep, 1)[0] + ".mp3", format = "mp3")
+				os.remove(file)
+		
+			success_count += 1
+
+		print("NOTE: download_youtube: %s %s のダウンロードが完了しました (%d/%d)" % (
+			dl_type, url, success_count, len(video_urls)
+		))
+
+
+	Thread(target = work_thread, args = [url, dl_type]).start()
+
+
+
+
+# == show time ==
+
+def show_time_loop():
+    while (True):
+        print("\r" + time.ctime(), end = "")
+
+        now = time.time()
+        time.sleep(int(now) + 1 - now)
+
+
+
+
+
+##### attendance_t #####
+
+class attendance_t:
+	class row_t:
 		def __init__(self, date, status, attendTime, lessonTime, room):
-			self.date = date;
-			self.status = status;
-			self.attendTime = attendTime;
-			self.lessonTime = lessonTime;
-			self.room = room;
+			self.date = date
+			self.status = status
+			self.attendTime = attendTime
+			self.lessonTime = lessonTime
+			self.room = room
 	
 		def __repr__(self):
-			return self.date + '\t' + self.status + '\t\t' + self.attendTime + '\t\t' + self.lessonTime + '\t' + self.room + '\n';
+			return self.date + '\t' + self.status + '\t\t' + self.attendTime + '\t\t' + self.lessonTime + '\t' + self.room + '\n'
 	
-		__str__ = __repr__;
+		__str__ = __repr__
 	
 	
-	def ValueTime(self, time: str):
-		splited = time.split(":");
-		value = 0;
+	def get_hours(self, time: str):
+		splited = time.split(":")
+		value = 0
 		for part in splited:
-			value *= 60;
-			value += float(part);
-		return value;
+			value *= 60
+			value += float(part)
+		return value
 		
 	def __init__(self, raw: str = None):
-		self.rows = [];
+		self.rows = []
 	
 		if (not raw):
-			raise ValueError;
+			print("NOTE: download_youtube: input from clipboard")
+			raw = clipboard.paste()
 		
 		if (raw.count('\n') == 0):
-			raw = open(raw);
+			try:
+				raw = open(raw)
+			except FileNotFoundError:
+				print(f"ERROR: download_youtube: the input detected as file, but couldn't found that ({raw})")
 		
 		if (type(raw) == _io.TextIOWrapper):
-			file = raw;
-			raw = file.read();
-			file.close();
+			file = raw
+			raw = file.read()
+			file.close()
 		
 		for line in raw.splitlines():
 			if (line.isspace()):
-				continue;
+				continue
 	
-			splited = line.split('\t');
-			idx = 0;
+			splited = line.split('\t')
+			idx = 0
 			while (idx < len(splited)):
 				if (not splited[idx]):
-					splited.pop(idx);
+					splited.pop(idx)
 				else:
-					idx += 1;
+					idx += 1
 			if (len(splited) < 5):
-				continue;
+				continue
 	
-			self.rows.append(self.Row(splited[0], splited[1], splited[2], splited[3], splited[4]));
+			self.rows.append(self.row_t(splited[0], splited[1], splited[2], splited[3], splited[4]))
     
 	def __repr__(self):
-		output = "\x1b[1mDate\t\t\tStatus\t\tAttend Time\tLesson Time\tRoom\x1b[0m\n";
+		output = "\x1b[1mDate\t\t\tStatus\t\tAttend Time\tLesson Time\tRoom\x1b[0m\n"
 		for row in self.rows:
 			if (row.status == "Absent"):
-				output += TERMCOLOR_RED + str(row) + TERMCOLOR_CLEAR;
+				output += TERMCOLOR_RED + str(row) + "\x1b[0m"
 			else:
-				output += str(row);
-		output += '\n';
+				output += str(row)
+		output += '\n'
 
-		output += "Record Count: %d\n" % (len(self.rows));
-		output += "Attend Time: %.2f hour\n" % (self.Attendance());
-		output += "Miss Time: %.2f hour\n" % (self.Missed());
-		return output;
+		output += "Record Count: %d\n" % (len(self.rows))
+		output += "Attend Time: %.2f hour\n" % (self.get_attendance())
+		output += "Miss Time: %.2f hour\n" % (self.get_missed())
+		return output
 	
-	__str__ = __repr__;
+	__str__ = __repr__
 	
-	def Select(self, date = None, status = None, attendTime = None, lessonTime = None, room = None):
-		result = Attendance();
+	def select(self, date = None, status = None, attendTime = None, lessonTime = None, room = None):
+		result = attendance_t()
 	
 		for row in self.rows:
 			if (status and row.status != status):
-				continue;
+				continue
 			if (lessonTime and row.lessonTime != lessonTime):
-				continue;
+				continue
 	
-			result.rows.append(row);
+			result.rows.append(row)
 	
-		return result;
+		return result
 	
-	def Attendance(self, totalHour: int = 1):
-		attendMintues = 0;
+	def get_attendance(self, totalHour: int = 1):
+		attendMintues = 0
 		for row in self.rows:
 			if (row.status == "Absent"):
-				continue;
+				continue
 	
-			lessonTime_splited = row.lessonTime.split(" - ");
-			lessonEnd = self.ValueTime(lessonTime_splited[1]);
+			lessonTime_splited = row.lessonTime.split(" - ")
+			lessonEnd = self.get_hours(lessonTime_splited[1])
 	
 			if (row.status == "Present"):
-				attendMintues += lessonEnd - self.ValueTime(lessonTime_splited[0]);
-				continue;
+				attendMintues += lessonEnd - self.get_hours(lessonTime_splited[0])
+				continue
 	
-			attendMintues += lessonEnd - self.ValueTime(row.attendTime);
+			attendMintues += lessonEnd - self.get_hours(row.attendTime)
 	
-		return attendMintues / (totalHour * 60);
+		return attendMintues / (totalHour * 60)
 	
-	def Missed(self, totalHour: int = 1):
-		missedMintues = 0;
+	def get_missed(self, totalHour: int = 1):
+		missedMintues = 0
 		for row in self.rows:
 			if (row.status == "Present"):
-				continue;
+				continue
 	
-			lessonTime_splited = row.lessonTime.split(" - ");
-			lessonStart = self.ValueTime(lessonTime_splited[0]);
+			lessonTime_splited = row.lessonTime.split(" - ")
+			lessonStart = self.get_hours(lessonTime_splited[0])
 	
 			if (row.status == "Absent"):
-				missedMintues += self.ValueTime(lessonTime_splited[1]) - lessonStart;
-				continue;
+				missedMintues += self.get_hours(lessonTime_splited[1]) - lessonStart
+				continue
 	
-			missedMintues += self.ValueTime(row.attendTime) - lessonStart;
+			missedMintues += self.get_hours(row.attendTime) - lessonStart
 	
-		return missedMintues / (totalHour * 60);
+		return missedMintues / (totalHour * 60)
 
 
 ##### Python Object #####
 
-def CountStringShowLength(text: str) -> int:
-	length: int = 0;
+def get_string_view_length(text: str) -> int:
+	length: int = 0
 	for char in text:
-		length += 1 + 1 - char.isascii();
-	return length;
+		length += 1 + 1 - char.isascii()
+	return length
 
 
-def DescriptObject(obj: any, language: str = "ja"):
-	### 情報表示 ###
-	objType = type(obj);
-	print(TERMCOLOR_YELLOW + "クラス: %s.%s" % (
-		objType.__module__,
-		objType.__name__
-	) + TERMCOLOR_CLEAR);
+def details(obj: any, language: str = "ja"):
+	# == content ==
 
-	### コメント表示 ###
+	content = repr(obj)
+	lines = content.splitlines()
+
+	print()
+	print("    " + "\n    ".join(lines[:12]))
+
+	if (len(lines) > 12):
+		print("    ...")
+	
+	print()
+	
+	# == 情報表示 ==
+
+	object_type = type(obj)
+	print(f"\x1b[32mクラス: {object_type.__module__}.{object_type.__name__}\x1b[0m")
 
 	# コメントがない
 	if (not obj.__doc__):
-		print(TERMCOLOR_GRAY + "コメントがありません!" + TERMCOLOR_CLEAR);
+		print("\x1b[2mこのメソッドにコメントがありません!\x1b[0m")
+		print()
+		return
 
 	# 原文で表示
-	elif (not language):
-		print(obj.__doc__);
+	if (not language):
+		print(obj.__doc__)
+		print()
+		return
 	
-	# 訳文で表示
-	else:
-		__LoadGoogleTranslate();
+	# 翻訳
+	global translator
 
-		length = len(obj.__doc__);
-		for i in range(length // 5000 + (1 if length % 5000 else 0)):
-			content = libGoogleTranslator.translate(obj.__doc__[i * 5000  : i + 4999], dest = language);
-			print(content.text);
+	if (translator == None):
+		translator = googletrans.Translator()
+
+	# 表示
+
+	length = len(obj.__doc__)
+
+	for i in range(length // 5000 + (1 if length % 5000 else 0)):
+		content = translator.translate(obj.__doc__[i * 5000  : i + 4999], dest = language)
+		print(content.text)
+		time.sleep(1)
 	
-	print();
+	print()
 
 
-def ListObjectMethods(obj: any, findname: str = None, details: bool = True, colors: bool = True):
+def show_object_methods(obj: any, findname: str = None, show_content: bool = True, show_colors: bool = True):
+	METHODCOLOURS = [
+		TERMCOLOR_GREEN,
+		TERMCOLOR_BOLD + TERMCOLOR_YELLOW,
+		TERMCOLOR_BOLD + TERMCOLOR_BLUE,
+		TERMCOLOR_YELLOW,
+		TERMCOLOR_BOLD + TERMCOLOR_GREEN,
+		TERMCOLOR_BLUE,
+		"",
+		"\x1b[2m",
+		TERMCOLOR_RED,
+	]
 
-	def AnalysisMethodType(obj: any, methodName: str, methodInfo: list):
+	METHOD_CLASS	= 0
+	METHOD_FUNCTION	= 1
+	METHOD_STRUCTURE= 2
+	METHOD_STRING	= 3
+	METHOD_NUMBER	= 4
+	METHOD_BOOL		= 5
+	METHOD_NORMAL	= 6
+	METHOD_NONE		= 7
+	METHOD_ERROR	= 8
+
+
+
+	def read_method_info(obj: any, methodName: str, methodInfo: list):
 		try:
-			method = getattr(obj, methodName);
-			methodClass = method.__class__;
+			method = getattr(obj, methodName)
+			methodClass = method.__class__
 
 			if (method == None):
-				methodInfo[0] = METHOD_NONE;
-				return;
+				methodInfo[0] = METHOD_NONE
+				return
 		
 			if (methodClass == bool):
-				methodInfo[0] = METHOD_BOOL;
-				methodInfo[2] = method;
-				return;
+				methodInfo[0] = METHOD_BOOL
+				methodInfo[2] = method
+				return
 		
 			if (methodClass in [int, float]):
-				methodInfo[0] = METHOD_NUMBER;
-				methodInfo[2] = method;
-				return;
+				methodInfo[0] = METHOD_NUMBER
+				methodInfo[2] = method
+				return
 		
 			if (methodClass in [str, bytes]):
-				methodInfo[0] = METHOD_STRING;
-				methodInfo[2] = method;
-				return;
+				methodInfo[0] = METHOD_STRING
+				methodInfo[2] = method
+				return
 		
 			if (methodClass == type or methodClass.__name__ == "module"):
-				methodInfo[0] = METHOD_CLASS;
-				return;
+				methodInfo[0] = METHOD_CLASS
+				return
 		
 			if (callable(method)):
-				methodInfo[0] = METHOD_FUNCTION;
-				return;
+				methodInfo[0] = METHOD_FUNCTION
+				return
 		
-			methodInfo[0] = METHOD_STRUCTURE;
+			methodInfo[0] = METHOD_STRUCTURE
 		except Exception as e:
-			methodInfo[0] = METHOD_ERROR;
-			methodInfo[2] = e;
+			methodInfo[0] = METHOD_ERROR
+			methodInfo[2] = e
 
 	### Cleaning input ###
 	if (findname):
-		findname = findname.lower();
+		findname = findname.lower()
 
 	### Collect method info ###
-	firstResults = [];
-	secondResults = [];
-	thirdResults = [];
-	longestNameLength = 0;
+	firstResults = []
+	secondResults = []
+	thirdResults = []
+	longest_name_length = 0
 	
 	for methodName in dir(obj):
-		methodInfo = [METHOD_NORMAL, methodName, None];
+		methodInfo = [METHOD_NORMAL, methodName, None]
 
 		# Filter method if findname enabled
 		if (findname):
-			methodName_lowered = methodName.lower();
+			methodName_lowered = methodName.lower()
 			if (methodName_lowered == findname):
-				firstResults.append(methodInfo);
+				firstResults.append(methodInfo)
 			
 			elif (methodName_lowered.find(findname) == 0):
-				secondResults.append(methodInfo);
+				secondResults.append(methodInfo)
 			
 			elif (methodName_lowered.find(findname) != -1):
-				thirdResults.append(methodInfo);
+				thirdResults.append(methodInfo)
 		
 			else:
-				continue;
+				continue
 		else:
-			firstResults.append(methodInfo);
+			firstResults.append(methodInfo)
 
 		# Longest name length for print table
-		longestNameLength = max(longestNameLength, len(methodName));
+		longest_name_length = max(longest_name_length, len(methodName))
 
 		# Collect method type and expand info if showdetails enabled
-		if (details):
-			AnalysisMethodType(obj, methodName, methodInfo);
+		if (show_content):
+			read_method_info(obj, methodName, methodInfo)
 
 	
-	### Ready to print table ###
+	# == Ready to print table ==
 
-	termWidth = os.get_terminal_size()[0];
+	termWidth = os.get_terminal_size()[0]
 	
-	longestNameLength = min(termWidth, longestNameLength + 1);
-	rowLength	= termWidth // longestNameLength;
-	indexLength	= termWidth // rowLength;
+	longest_name_length = min(termWidth, longest_name_length + 1)
+	rowLength	= termWidth // longest_name_length
+	indexLength	= termWidth // rowLength
 	
-	firstResults.sort();
-	secondResults.sort();
-	thirdResults.sort();
+	firstResults.sort()
+	secondResults.sort()
+	thirdResults.sort()
 
 	### Print method table ###
 
-	index = 0;
-	count = 0;
+	index = 0
+	count = 0
 
 	for info in thirdResults + secondResults + firstResults:
-		display = info[1];
-		length = len(display);
+		display_name = info[1]
+		length = len(display_name)
 
 		# Create expend display if possible
 		
 		if (info[2] != None):
 			# Different display by class
 			if (info[0] == METHOD_BOOL):
-				extend = " (T)" if (info[2]) else " (F)";
+				extend = " (T)" if (info[2]) else " (F)"
 			elif (info[0] == METHOD_ERROR):
-				extend = " (" + info[2].__class__.__name__ + ")";
+				extend = " (" + info[2].__class__.__name__ + ")"
 			else:
-				extend = " (" + repr(info[2]) + ")";
+				extend = " (" + repr(info[2]) + ")"
 			
 			# use expand display if indexLength enough
-			extendLength = CountStringShowLength(extend);
+			extendLength = get_string_view_length(extend)
 			if (length + extendLength < indexLength):
-				display += extend;
-				length += extendLength;
+				display_name += extend
+				length += extendLength
 		
 		# Print and count
 
 		print("%s%s%s%s" % (
-			METHODCOLOURS[info[0]] if (colors) else "",
-			display,
-			"\x1b[0m" if (colors and details) else "",
+			METHODCOLOURS[info[0]] if (show_colors) else "",
+			display_name,
+			"\x1b[0m" if (show_colors and show_content) else "",
 			" " * max(1, indexLength - length)
-		), end="");
+		), end = "")
 
-		index += 1;
-		count += 1;
+		index += 1
+		count += 1
 
 		# Next line if row full
 		if (index >= rowLength):
-			print();
-			index = 0;
+			print()
+			index = 0
 	if (index > 0):
-		print();
+		print()
 	
 	### Print number of method ###
-	print("\nCount: " + str(count));
+	print("\nCount: " + str(count))
 
 
-def IsObjectMultiValue(obj: any) -> bool:
-	return type(obj) in [list, tuple, set];
 
-def IsObjectCalculatable(obj: any) -> bool:
-	return type(obj) in [int, float, bool];
 
 
+# == pandas ==
 
-##### Useful Methods #####
+def load_dataframe(file: str = None, low_memory: bool|None = None):
+	if (file == None):
+		file = ask_file([("CSV files", "*.csv"), ("All files", "*.*")])
 
-def UnpackValues(values: any) -> list:
-	"Unpack multi array to 1d array (example: [[1, 2], [3, [4]]] -> [1, 2, 3, 4])"
+	# == loads ==
 
-	unpacked = [];
+	file_type = file.rsplit(os.extsep, 1)[1]
 
-	for value in values:
-		if (IsObjectMultiValue(value)):
-			unpacked += UnpackValues(value);
-			continue;
+	if (file_type == "csv"):
+		return pd.read_csv(file, low_memory = low_memory)
 
-		unpacked.append(value);
+	if (file_type in ["xls", "xlsx"]):
+		return pd.read_excel(file)
 
-	return unpacked;
+	if (file_type == "json"):
+		return pd.read_json(file)
 
+	if (file_type == "xml"):
+		return pd.read_xml(file)
 
-def UnpackCalculatableValues(values: any, errorFuncName: str = False) -> list:
-	"""Unpack multi array to 1d array by only calculateable number
-	example: [[1, "hello world"], [print, [os]]] -> [1]
-	
-	values : array to unpack
-	errorFuncName : Title to print error message (default: False)"""
+	print(f"ERROR: load_dataframe: Unsupported file type: {file_type}")
 
-	unpacked = [];
 
-	for value in values:
-		if (IsObjectMultiValue(value)):
-			unpacked += UnpackCalculatableValues(value);
-			continue;
 
-		if (IsObjectCalculatable(value)):
-			unpacked.append(value);
-			continue;
 
-		if (errorFuncName):
-			print("ERROR: %s: %s not a calculatable value." % [errorFuncName, type(value).__name__]);
+def plot_hist(**args):
+	return plt.hist(**args)
 
-	return unpacked;
 
+def plot_line(**args):
+	return plt.plot(**args)
 
-##### 統計学 #####
 
-def Quartiles(*values) -> tuple[tuple[any, any], tuple[any, any], tuple[any, any]]:
-	unpacked = UnpackValues(values);
-	unpacked.sort();
-	
-	N = len(unpacked) + 1;
-	
-	index = N/4;
-	first1 = unpacked[round(index) - 1];
-	first2 = unpacked[round(index) - (index%1 != 0.5)];
-	
-	index = N/2;
-	second1 = unpacked[round(index) - 1];
-	second2 = unpacked[round(index) - (index%1 != 0.5)];
-	
-	index = N * 3/4;
-	third1 = unpacked[round(index) - 1];
-	third2 = unpacked[round(index) - (index%1 != 0.5)];
-	
-	def Combine(a, b):
-		return ((a + b) / 2) if (IsObjectCalculatable(a) and IsObjectCalculatable(b)) else (a, b);
-	
-	return (Combine(first1, first2), Combine(second1, second2), Combine(third1, third2));
+def plot_pie(**args):
+	return plt.pie(**args)
 
 
+def plot_bar(**args):
+	return plt.bar(**args)
 
 
 
-def Mean(*values) -> float:
-	unpacked = UnpackCalculatableValues(values);
-	return sum(unpacked) / len(unpacked);
 
 
 
-def Mode(*values) -> tuple[any, int]:
-	"return the most often value and often times at values"
 
-	unpacked = UnpackValues(values);
-	record = {};
-	
-	for value in unpacked:
-		try:
-			if (record.get(value)):
-				record[value] += 1;
-			else:
-				record[value] = 1;
-		except:
-			pass
-	
-	mostOftenValue: any = None;
-	mostOftenTimes: int = 0;
-	
-	for value, times in record.items():
-		if (times > mostOftenTimes):
-			mostOftenValue = value;
-			mostOftenTimes = times;
-	
-	return (mostOftenValue, mostOftenTimes);
 
+# == old names ==
 
-def Median(*values) -> tuple[any, any]:
-	return Quartiles(values)[1];
+write_images_to_gif = write_gif
 
+write_audio_to_mp3 = write_mp3
 
-def Midrange(*values) -> float:
-	unpacked = UnpackCalculatableValues(values);
-	return (max(unpacked) + min(unpacked)) / 2;
+list_object_methods = show_object_methods
 
+time_display = show_time_loop
 
+set_video_position = set_video_pos
 
-def FirstQuartile(*values) -> tuple[any, any]:
-	return Quartiles(values)[0];
 
-def SecondQuartile(*values) -> tuple[any, any]:
-	return Quartiles(values)[1];
 
-def ThirdQuartile(*values) -> tuple[any, any]:
-	return Quartiles(values)[2];
 
+# === all ==
 
-
-def Midhinge(*values) -> tuple[any, any]:
-	quartiles = Quartiles(values);
-	return (quartiles[0] + quartiles[2]) / 2;
-
-
-
-def MAD(*values) -> float:
-	unpacked = UnpackCalculatableValues(values);
-	mean = Mean(unpacked);
-	
-	return sum([abs(val - mean) for val in unpacked]) / len(unpacked);
-
-def Variance(*values) -> float:
-	unpacked = UnpackCalculatableValues(values);
-	mean = Mean(unpacked);
-	
-	return sum([(val - mean)**2 for val in unpacked]) / len(unpacked);
-
-def StandardDeviation(*values) -> float:
-	return Variance(values) ** 0.5;
-
-def VariationCoefficient(*values) -> float:
-	return (StandardDeviation(values) / Mean(values)) * 100;
-
-def SkewnessCoefficient(*values) -> float:
-	return 3 * (Mean(values) - Median(values)) / StandardDeviation(values);
-
-
-
-
-
-##### Time Display #####
-
-def DisplayTime():
-	while (true):
-		print("\r" + time.ctime(), end = "");
-	
-		now = time.time();
-		time.sleep(int(now) + 1 - now);
-
-
-
-##### ライキン Method #####
-
-def ROK_SplitSoldier(soldiers: list[int], capacities: list[int], preference: str = None):
-	## コピーを作成 ##
-	lessSoldiers = soldiers.copy();
-
-	## パラメーター修正 ##
-	if (type(preference) == str):
-		preference = ord(preference);
-
-		if (preference >= ord('A') or preference <= ord('Z')):
-			preference -= ord('A');
-		elif (preference == ord('a') or preference <= ord('z')):
-			preference -= ord('a');
-		else:
-			print("ERROR: %s: Invalid preference '%s'!" % ("ROK_SplitSoldier", preference));
-			return;
-	
-	if (preference and (preference < 0 or preference >= len(soldiers))):
-		print("ERROR: %s: Preference soldier %s not exists!" % ("ROK_SplitSoldier", chr(preference + ord('A'))));
-		return;
-
-	## 統計 ##
-	totalSoldier = sum(soldiers);
-	totalCapacitie = sum(capacities);
-
-	armyCount = len(capacities);
-
-	## 推薦兵種の計算 ##
-	preferenceCount: int = 0;
-
-	if (preference):
-		preferenceCount = min(soldiers[preference], totalCapacitie) / armyCount;
-
-	## 兵数の数表示する ##
-	print("Total soldiers: %d" % totalSoldier);
-	print();
-
-	## 各部隊の各兵数を計算し、表示する ##
-	for armyNumber in range(armyCount):
-		# 各部隊の計算で変動しているため、毎回計算する
-		lessTotalSoldiers = sum(lessSoldiers);
-
-		# 部隊の分配を計算する
-		useSoldiers: list[int] = [];
-		requestSoldier: int = capacities[armyNumber] - preferenceCount;
-		
-		for soldierType in range(len(lessSoldiers)):
-			if (soldierType == preference):
-				useSoldier: int = preferenceCount;
-			else:
-				useSoldier: int = requestSoldier * lessSoldiers[soldierType] / lessTotalSoldiers;
-			
-			useSoldier = min(useSoldier, lessSoldiers[soldierType]);
-			
-			useSoldiers.append(useSoldier);
-			lessSoldiers[soldierType] -= useSoldier;
-		
-		# 部隊の分配を表示
-		useSoldierCount: int = sum(useSoldiers);
-		print("Army %d: Capacity %d  Actually %d (%.2f%%)" % (
-			armyNumber + 1,
-			capacities[armyNumber],
-			useSoldierCount, useSoldierCount / totalSoldier * 100,
-		));
-
-		for soldierType in range(len(lessSoldiers)):
-			print("\tSoldier %s: %d" % (chr(ord('A') + soldierType), useSoldiers[soldierType]));
-		print();
-
-	## 余った兵を表示する ##
-	lessTotalSoldiers = sum(lessSoldiers);
-
-	print("Less soldiers: %d (%.2f%%)" % (lessTotalSoldiers, lessTotalSoldiers / totalSoldier * 100));
-
-	for soldierType in range(len(lessSoldiers)):
-		print("\tSoldier %s: %d" % (chr(ord('A') + soldierType), lessSoldiers[soldierType]));
-	
-	print();
-
-
-
-##### libYoutube #####
-
-def ConvertToMP3(file: str, output: str) -> bool:
-	libAudioSegment = __LoadPydub();
-	
-	try:
-		audio = libAudioSegment.from_file(file);
-		audio.export(output, format = "mp3");
-	except:
-		print();
-		return False;
-
-	return True;
-
-
-def DownloadYoutubeMP3(url: str):
-	# Load library
-	libYoutube = __LoadlibYoutube();
-	
-	# Load libYoutube
-	yt = libYoutube(url);
-	
-	# get streams
-	streams = yt.streams.filter(abr = "160kbps");
-	
-	if (len(streams) < 1):
-		print("ERROR: No suitable stream!");
-		return;
-	
-	# Download
-	filename = streams[0].download();
-	
-	# Convert file to MP3
-	filename_splited = filename.rsplit(os.extsep, 1);
-	output = filename_splited[0] + os.extsep + "mp3";
-	
-	if (filename_splited[1].lower() != "mp3"):
-		ret = ConvertToMP3(filename, output);
-		
-		if (ret == False):
-			print("MP3 Convert failed! file save to %s" % (output));
-			return;
-	
-	os.remove(filename);
-	print("MP3 save to %s" % (output));
+__all__ = [
+	method for method in globals().keys()
+		if method not in [
+			"_io",
+			"clear_t", "chdir_t", "list_dir_t", "list_tree_t"
+		] + lazy_import.registered
+]
