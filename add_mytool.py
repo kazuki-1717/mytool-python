@@ -6,8 +6,8 @@ import os;
 FILES = ["lazy_import.py", "mytool.py"]
 
 for file in FILES:
-    code_file = open(file, "r");
-    dest_file = open(os.__file__.rsplit(os.sep, 1)[0] + os.sep + file, "w");
+    code_file = open(file, "rb");
+    dest_file = open(os.__file__.rsplit(os.sep, 1)[0] + os.sep + file, "wb");
 
     dest_file.write(code_file.read());
 
