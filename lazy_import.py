@@ -1,6 +1,8 @@
 # from lazy_import import *
 
 import subprocess
+import sys
+import importlib
 
 class lazy_import:
     """lazy_import 1.0.0"""
@@ -27,10 +29,10 @@ class lazy_import:
             # == try to import module ==
 
             if (self.upgrade):
-                raise Exception("move to except part.")
+                raise ImportError("move to except part.")
 
-            self.module = __import__(self.module_name)
-        except:
+            self.module = importlib.import_module(self.module_name)
+        except (ImportError, ModuleNotFoundError):
             # == install module if not found ==
 
             # convert types
@@ -43,12 +45,12 @@ class lazy_import:
             # install
             for name in self.install_names:
                 subprocess.run(
-                    ["py", "-m", "pip", "install", name, "--quiet"] + (["--upgrade"] if self.upgrade else []),
+                    [sys.execuatable, "-m", "pip", "install", name, "--quiet"] + (["--upgrade"] if self.upgrade else []),
                     stdout = subprocess.DEVNULL,
                     stderr = subprocess.DEVNULL
                 );
 
-            self.module = __import__(self.module_name);
+            self.module = importlib.import_module(self.module_name);
 
     def __getattr__(self, attr_name):
         self._import();
@@ -59,7 +61,9 @@ class lazy_import:
         return dir(self.module);
 
     def __repr__(self):
-        return f"lazy_import({self.module_name}, {self.install_names})"
+        return "lazy_import(%s, %s%s)" % (
+            self.module_name, self.install_names, " upgrade = true" if self.upgrade else ""
+        )
 
 
 
