@@ -5,7 +5,42 @@ import sys
 import importlib
 
 class lazy_import:
-    """lazy_import 1.0.0"""
+    """lazy_import 1.0.0
+
+import module when use, also install library if module not installed
+
+usage:
+```
+module = lazy_import(
+    "module_name",              # import module by this
+    ["install_option1", ...],   # if "module_name" not exist, installs modules by this list (default: refer to module_name)
+    /,
+    upgrade = False              # always upgrade module before import (default: false)
+)
+```
+
+
+samples:
+```python
+# there are only lazy_import in lazy_import.__all__
+from lazy_import import lazy_import
+
+# import numpy. install numpy if not existed
+numpy = lazy_import("numpy")
+
+# import cv2. install opencv2-python if not existed
+cv2 = lazy_import("cv2", "opencv2-python")
+
+# import matplotlib.pyplot as plt. install matplotlib if not existed
+plt = lazy_import("matplotlib.pyplot", "matplotlib")
+
+# import pydub. install ffmpeg and pydub if not existed
+pydub = lazy_import("pydub", ["ffmpeg", "pydub"])
+
+# always upgrade pytube before import pytube**
+pytube = lazy_import("pytube", upgrade = True)
+```
+"""
 
     registered = []
 

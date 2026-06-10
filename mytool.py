@@ -158,55 +158,40 @@ def touch(files: str, *others: list[str]):
 
 class video_t:
 	def __init__(self, source = None):
-		source_type = type(source)
+		try:
+			source_type = type(source)
 
-		if (source_type == cv2.VideoCapture):
-			self.source = "cv2.VideoCapture";
-			self.value = source;
-			return;
+			if (source_type == cv2.VideoCapture):
+				self.source = "cv2.VideoCapture";
+				self.value = source;
 
-		if (source_type == str):
-			self.source = source;
-			self.value = cv2.VideoCapture(source);
-			return;
+			elif (source_type == str):
+				self.source = source;
+				self.value = cv2.VideoCapture(source);
 
-		if (source == None):
-			self.source = ask_file([("Video files", "*.mp4 *.webm *.avi *.mov *.wmv *.flv"), ("All files", "*.*")]);
-			self.value = cv2.VideoCapture(self.source);
-			return;
+			elif (source == None):
+				self.source = ask_file([("Video files", "*.mp4 *.webm *.avi *.mov *.wmv *.flv"), ("All files", "*.*")]);
+				self.value = cv2.VideoCapture(self.source);
+	
+	
+			self.width = int(self.value.get(3));
+			self.height = int(self.value.get(4));
+			self.fps	= self.value.get(5);
+			self.duration = 1000 // self.value.get(5);
+			self.rate = self.duration;
+			self.total_frame = int(self.value.get(7));
+		
+		except TypeError:
+			print(f"error: invalid input type {source_type.__name__}");
 
-		print(f"error: invalid input type {source_type.__name__}");
+		except Exception as e:
+			print(f"error: cannot read video {str(e)}");
 
 	# == get ==
 
 	@property
 	def pos(self) -> int:
 		return int(self.value.get(1));
-
-	@property
-	def width(self) -> int:
-		return int(self.value.get(3));
-	
-	@property
-	def height(self) -> int:
-		return int(self.value.get(4));
-
-	@property
-	def fps(self) -> float:
-		return self.value.get(5);
-
-	@property
-	def duration(self) -> int:
-		return 1000 // self.value.get(5);
-
-	@property
-	def rate(self) -> int:
-		"alias of video_t.duration()"
-		return 1000 // self.value.get(5);
-
-	@property
-	def total_frame(self) -> int:
-		return int(self.value.get(7));
 
 
 	# == set ==

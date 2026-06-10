@@ -2,19 +2,15 @@
 
 some useful methods for python interpreter, this install require library dynamically
 
-| mytool | python 3.3.0 |
+| mytool | python 4.0.0 |
 | ------ | ------------ |
 | update | 2026-06-10   |
 
 ## How to install
 
-First, make sure you have installed python in version 3. Then, download this package and run make_mytool3.py.
-
-Or you can run this command to install
-
 ```
-git clone https://github.com/kazuki1717/mytool3-python
-py mytool3-python/add_mytool3.py
+git clone https://github.com/kazuki1717/mytool-python
+py mytool-python/add_to_library.py
 ```
 
 ## import
@@ -27,153 +23,45 @@ from mytool import *
 
 ## Methods
 
+### lazy_import
+
+| method                                | usage                                                               |
+| ------------------------------------- | ------------------------------------------------------------------- |
+| `module = lazy_import(module_name)` | import module when use, and install library if module not installed |
+
 ### objects methods
 
-| object_methods(object) | object_details(object) |  |  |  |
-| ---------------------- | ---------------------- | - | - | - |
-|                        |                        |  |  |  |
-|                        |                        |  |  |  |
+| method                 | usage                                  |
+| ---------------------- | -------------------------------------- |
+| object_methods(object) | show `object`  methods              |
+| object_details(object) | show `object` translated description |
 
 ### OS methods
 
-| cd  | chdir   |  |
-| --- | ------- | - |
-| cls | clear   |  |
-| ls  | listdir |  |
+| method        | alias       | usage                                                           |
+| ------------- | ----------- | --------------------------------------------------------------- |
+| cd(path)      | chdir(path) | change currently directory                                      |
+| clear         | cls         | clear terminal, no () needed                                    |
+| listdir(path) | ls          | list items in path, no () needed if looking currectly directory |
+| touch(file)   |             | create file                                                     |
 
-### show_object_methods()
+### video methods
 
-list `object` all method name, colored and order by method type, also shows their value if possible
+a cv2.VideoCapture extend, not directly extend from VideoCapture since lazy import
 
-```python
-def show_object_methods(object, findname: str = "", details: bool = True, colors: bool = True) -> None:
-  pass
-```
-
-- object : a variable you want to know
-- findname : filter methods by name to only show you wanted
-- details : will the list show its value if possible (False would faster)
-- colors : will the list content colored by method type (False would faster)
-
-### clear
-
-clear terminal text
-
-usage:
-
-```python
-clear    # no () needed
-cls    # alias of clear
-```
-
-### chdir
-
-show/change working directory
-
-```python
-chdir          # print current path, no () needed
-chdir(dest)    # change working directory to dest
-```
-
-### list_dir
-
-show directory files
-
-```python
-list_dir        # show all files in current directory
-list_dir(path)  # show all files in path
-```
-
-### list_tree
-
-```python
-list_tree        # show files tree in current directory
-list_tree(path)  # show files tree in path
-```
-
-### load_video()
-
-load opencv2.VideoCapture from file path or explorer select
-
-```python
-video: cv2.VideoCapture = load_video(path);  # open file in `path`
-
-video: cv2.VideoCapture = load_video();      # ask user file by open an exploer and open it
-```
-
-- path : video path in str, or open explorer to select if None
-
-### play_video()
-
-play video in new monitor
-
-```python
-def play_video(video: str | None | cv2.VideoCapture = None) -> None:
-  pass
-```
-
-- video : to play in display, you can put video object, file name or None to open explorer selecting
-
-### get_video_...(video)
-
-get video information
-
-```python
-POSITION  = get_video_pos(video)
-WIDTH     = get_video_width(video)
-HEIGHT    = get_video_height(video)
-FPS       = get_video_fps(video)
-DURATION  = get_video_duration(video)
-```
-
-### is_valid_video()
-
-is the video vaild
-
-```python
-valid = is_valid_video(video);
-```
-
-- video : cv2.VideoCapture
-
-### write_mp4()
-
-write mp4 file
-
-**usage**
-
-```python
-
-```
-
-### write_gif()
-
-write GIF file
-
-**usage**
-
-```python
-# == constants ==
-OUTPUT = "output.gif"
-DURATION = 1000 / 25
-LOOP = 0
-
-# == useway 1 ==
-write_gif("frames/", OUTPUT, DURATION, LOOP)
-
-# == useway 2 ==
-frames = [load_image(file) for file in os.listdir(FOLDER)]
-write_gif(frames, OUTPUT, DURATION, LOOP)
-
-# == useway 3 ==
-write_gif("sample.mp4", OUTPUT, DURATION, LOOP)
-
-```
-
-- frames : GIF frames, it could be a directory path storing frames or image list
-- output : ouput GIF name
-- duration : every frame time to next frame
-- loop : how many times the GIF will loops, default: 0 (mean infine)
+| method                                    | alias      | usage                                                 |
+| ----------------------------------------- | ---------- | ----------------------------------------------------- |
+| video = video_t(source)                   |            | load video from file, default asking file in explorer |
+| video.width                               |            |                                                       |
+| video.height                              |            |                                                       |
+| video.fps                                 |            |                                                       |
+| video.duration                            | video.rate |                                                       |
+| video.set_pos(pos)                        |            |                                                       |
+| video.play(window_name, fullscreen, loop) |            | play video in new window                              |
+| video.to_cv2_images()                     |            | convert frames to cv2 images list                     |
+| video.to_pil_images()                     |            | convert frames to pil image list                      |
+| video.write_mp4(output,fps,width,height)  |            | write mp4                                             |
+| video.write_gif(output,loop)              |            | write gif                                             |
 
 ## ライセンス
 
