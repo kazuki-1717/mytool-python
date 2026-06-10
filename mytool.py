@@ -1,4 +1,4 @@
-PROGRAM_VERSION = "3.2.0 2026-03-28"
+MYTOOL_VERSION = "python 4.0.0 2026-06-10"
 
 # == library ==
 
@@ -40,15 +40,6 @@ if (IS_WIN):
 	os.system("color")
 
 
-TERMCOLOR_CLEAR: str = "\033[0m"
-
-TERMCOLOR_RED: str = "\033[31m"
-TERMCOLOR_GREEN: str = "\033[32m"
-TERMCOLOR_YELLOW: str = "\033[33m"
-TERMCOLOR_BLUE: str = "\033[34m"
-
-TERMCOLOR_BOLD: str = "\033[1m"
-TERMCOLOR_GRAY: str = "\x1b[2m"
 
 
 
@@ -86,7 +77,7 @@ class clear_t:
             print("\x1b[2J\x1b[00H", end = "")
         return ""
 
-cls = CLS = clear = CLEAR = clear_t()
+cls = clear = clear_t()
 
 
 
@@ -108,7 +99,7 @@ cd = chdir = chdir_t()
 
 
 
-class list_dir_t:
+class listdir_t:
 	def __repr__(self):
 		self.listdir()
 		return ""
@@ -118,7 +109,7 @@ class list_dir_t:
 	def listdir(self, path = ""):
 		os.system(("dir " if IS_WIN else "ls ") + ('"' + path + '"' if (path) else ""))
 
-ls = list_dir = list_dir_t()
+ls = listdir = listdir_t()
 
 
 
@@ -165,259 +156,283 @@ def touch(files: str, *others: list[str]):
 
 # ==== video ====
 
-# == load ==
+class video_t:
+	def __init__(self, source = None):
+		source_type = type(source)
 
-def load_video(object = None):
-	"""load video by different type
+		if (source_type == cv2.VideoCapture):
+			self.source = "cv2.VideoCapture";
+			self.value = source;
+			return;
+
+		if (source_type == str):
+			self.source = source;
+			self.value = cv2.VideoCapture(source);
+			return;
+
+		if (source == None):
+			self.source = ask_file([("Video files", "*.mp4 *.webm *.avi *.mov *.wmv *.flv"), ("All files", "*.*")]);
+			self.value = cv2.VideoCapture(self.source);
+			return;
+
+		print(f"error: invalid input type {source_type.__name__}");
+
+	# == get ==
+
+	@property
+	def pos(self) -> int:
+		return int(self.value.get(1));
+
+	@property
+	def width(self) -> int:
+		return int(self.value.get(3));
 	
-	- object (cv2.VideoCapture) : return object
-	- object (str) : load video from object
-	- object (None) : provide explorer to select video file and load it
-	"""
-	object_type = type(object)
+	@property
+	def height(self) -> int:
+		return int(self.value.get(4));
 
-	if (object_type == cv2.VideoCapture):
-		return object
+	@property
+	def fps(self) -> float:
+		return self.value.get(5);
 
-	if (object_type == str):
-		return cv2.VideoCapture(object)
+	@property
+	def duration(self) -> int:
+		return 1000 // self.value.get(5);
 
-	if (object == None):
-		return cv2.VideoCapture(ask_file([("Video files", "*.mp4 *.webm *.avi *.mov *.wmv *.flv"), ("All files", "*.*")]))
+	@property
+	def rate(self) -> int:
+		"alias of video_t.duration()"
+		return 1000 // self.value.get(5);
 
-	raise Exception(f"invalid input type {object_type.__name__}")
-
-
-# == get ==
-
-def get_video_pos(video) -> int:
-    return int(video.get(1))
-
-def get_video_width(video) -> int:
-    return int(video.get(3))
-
-def get_video_height(video) -> int:
-    return int(video.get(4))
-
-def get_video_fps(video) -> float:
-    return video.get(5)
-
-def get_video_duration(video) -> int:
-    return 1000 // video.get(5)
-
-get_video_rate = get_video_duration		# alias
+	@property
+	def total_frame(self) -> int:
+		return int(self.value.get(7));
 
 
-# == check ==
+	# == set ==
 
-def is_vaild_video(video) -> bool:
-    return type(video) == cv2.VideoCapture and video.isOpened()
-
-
-# == set ==
-
-def set_video_pos(video, position: int):
-	if (not is_vaild_video(video)):
-		print("set_video_pos: not a video variable!")
-		return
-	
-	video.set(1, int(position))
+	def set_pos(self, position: int):
+		self.value.set(1, int(position))
 
 
-# == play ==
+	# == play ==
 
-def play_video(video = None, window_name: str = "play_video", fullscreen: bool = False, loop: bool = True):
-    video = load_video(video)
-    if (video == None):
-        return
+	def play(self, window_name: str = "", fullscreen: bool = False, loop: bool = True):
+		if not (window_name):
+			window_name = os.path.split(self.source)[1];
 
-    video.set(1, 0)
+		self.set_pos(0)
 
-    V_WIDTH = get_video_width(video)
-    V_HEIGHT = get_video_height(video)
-    V_FRAME_COUNT = video.get(7)
-
-    V_FPS = get_video_fps(video)
-    V_DURATION = get_video_duration(video)
-
-    cv2.namedWindow(window_name,
-        cv2.WINDOW_FULLSCREEN if fullscreen else cv2.WINDOW_NORMAL
-    )
-    cv2.resizeWindow(window_name, V_WIDTH, V_HEIGHT)
+		state = {
+			'running': True,
+			'loop': loop,
+			'video': self,
+			'now': 0
+		}
+		caches = [];
 
 
-    screenshot_number = 1
-    while (os.path.isfile(f"screenshot-{screenshot_number}.png")):
-        screenshot_number += 1
 
+		def thread(state, caches):
+			video = state['video'];
+			duration = video.duration / 1000;
 
-    playing = True
+			while (state['running']):
+				tick = time.time();
+				ret, frame = video.value.read()
 
-    ret = False
-    frame = None
-    now = -1
-
-    while (True):
-        start = cv2.getTickCount()
+				if (ret == False):
+					if (state['loop'] == True):
+						video.set_pos(0)
+					else:
+						video.set(video.total_frame - 1)
+				
+					ret, frame = video.value.read()
 		
-        if (playing or not ret):
-            ret, frame = video.read()
-            now += 1
+				caches.append(frame)
 
-            if (ret == False):
-                if (loop == True):
-                    video.set(1, 0)
-                else:
-                    video.set(1, V_FRAME_COUNT - 1)
-            
-                ret, frame = video.read()
+				if (len(caches) > 3):
+					caches.pop(0);
+		
 
-            cv2.imshow(window_name, frame)
+				used_time = time.time() - tick;
+				delay_time = max(0, min(duration, duration - used_time));
 
-        end = cv2.getTickCount()
+				time.sleep(delay_time)
+				tick = cv2.getTickCount();
+		
+		Thread(target = thread, args = [state, caches]).start();
 
 
-		# delay_time around 1 to V_DURATION, calculate by V_DURATION - used_time
-        used_time = (end - start) / 1e6
-        delay_time = int(max(1, min(V_DURATION, V_DURATION - used_time)))
-
-        key = cv2.waitKeyEx(delay_time)
-
-        # == exit handle ==
-
-        try:		# User closed window : Quit out
-            cv2.getWindowProperty(window_name, 0)
-        except:
-            print(f"NOTE: play_video: ウィンドウ {window_name} を閉じる!")
-            break
-
-        if (key == 27):
-            break
-
-        # == option ==
-
-        if (key == ord('t')):	# T : Take photo
-            filename = f"screenshot-{screenshot_number}.png"
-            screenshot_number += 1
-
-            cv2.imwrite(filename, frame)
-            print(f"NOTE: play_video: Screenshot saved to {filename}")
-            continue
-        
-        if (key == ord(' ')):	# SPACE : Switch playing
-            playing = not playing
-            if (playing == True and video.get(1) == V_FRAME_COUNT):
-                video.set(1, 0)
-            continue
-        
-        if (key == ord('l')):
-            loop = not loop
-            print("NOTE: play_video: Loop play is " + ("enable" if (loop) else "disable") + " now!")
-            if (loop == True and playing == False):
-                playing = True
-            continue
-        
-        if (key == 0x7a0000):
-            fullscreen = not fullscreen
-            cv2.setWindowProperty(window_name,
-                cv2.WND_PROP_FULLSCREEN, (cv2.WINDOW_FULLSCREEN if fullscreen else 0)
-            )
-            continue
-
-        # == move ==
-
-        if (key >= ord('0') and key <= ord('9')):
-            offset = V_FRAME_COUNT / 10 * (key - ord('0'))
-        
-        # 'A' : Move back 5 seconds
-        elif (key == ord('a')):
-            offset = now - V_FPS * 5 - 1
-        
-        # 'D' : Move front 5 seconds
-        elif (key == ord('d')):
-            offset = now + V_FPS * 5
-        
-        # ',' : Move back frame
-        elif (key == ord(',')):
-            offset = now - 1
-        
-        # '.' : Move front frame
-        elif (key == ord('.')):
-            offset =  now + 1
-        else:
-            continue
-
-        offset = round(max(0, min(offset, V_FRAME_COUNT - 1)))
-        now = offset
-        video.set(1, offset)
-        
-        # Flush Frame after offset moved
-        ret, frame = video.read()
-        cv2.imshow(window_name, frame)
+		cv2.namedWindow(window_name,
+			cv2.WINDOW_FULLSCREEN if (fullscreen) else cv2.WINDOW_NORMAL
+		)
+		cv2.resizeWindow(window_name, self.width, self.height)
 
 
-
-# == to ==
-
-def to_cv2_image_list(video):
-	video = load_video(video)
-
-	frames = []
-	while (True):
-		ret, frame = video.read()
-		if (ret == False):
-			break
-		frames.append(frame)
-	return frames
-
-def to_pil_image_list(video):
-	video = load_video(video)
-
-	frames = []
-	while (True):
-		ret, frame = video.read()
-		if (ret == False):
-			break
-		frames.append(to_pil_image(frame))
-	return frames
+		screenshot_number = 1
+		while (os.path.isfile(f"screenshot-{screenshot_number}.png")):
+			screenshot_number += 1
 
 
+		playing = True
+		frame = None
+		tick = cv2.getTickCount()
+		duration = self.duration;
+		
+		try:
+			while (True):
+				if (playing or frame is None):
+					while (not caches):
+						# print("main is waiting");
+						cv2.waitKey(1);
+					
+					frame = caches.pop(0);
+					
+					cv2.imshow(window_name, frame);
 
 
+				# delay_time around 1 to self.duration, calculate by self.duration - used_time
+				used_time = (cv2.getTickCount() - tick) / 1e6
+				delay_time = int(max(1, min(duration, duration - used_time)))
 
+				key = cv2.waitKeyEx(delay_time)
+				tick = cv2.getTickCount();
 
-# == write ==
+				# == exit handle ==
 
-def write_mp4(object, output: str, fps: float, width: int, height: int):
-	def convert_thread(video, output: str, fps: float, width: int, height: int):
-		writer = cv2.VideoWriter(output, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+				try:		# User closed window : Quit out
+					cv2.getWindowProperty(window_name, 0)
+				except:
+					break
 
-		orignal_pos = get_video_pos(video)
-		set_video_pos(video, 0)
+				if (key == -1):
+					continue;
+
+				if (key == 27):
+					break
+
+				# == option ==
+
+				if (key == ord('t')):	# T : Take photo
+					filename = f"screenshot-{screenshot_number}.png"
+					screenshot_number += 1
+
+					cv2.imwrite(filename, frame)
+					print(f"NOTE: play_video: Screenshot saved to {filename}")
+					continue
+				
+				if (key == ord(' ')):	# SPACE : Switch playing
+					playing = not playing
+					continue
+				
+				if (key == ord('l')):
+					state['loop'] = not state['loop'];
+
+					print("NOTE: play_video: Loop play is " + ("enable" if (state['loop']) else "disable") + " now!")
+					if (state['loop'] == True and playing == False):
+						playing = True
+					continue
+				
+				if (key == 0x7a0000):
+					fullscreen = not fullscreen
+					cv2.setWindowProperty(window_name,
+						cv2.WND_PROP_FULLSCREEN, (cv2.WINDOW_FULLSCREEN if fullscreen else 0)
+					)
+					continue
+
+				# == move ==
+
+				if (key >= ord('0') and key <= ord('9')):
+					offset = self.total_frame / 10 * (key - ord('0'))
+				
+				# 'A' : Move back 5 seconds
+				elif (key == ord('a')):
+					offset = state['now'] - self.fps * 5 - 1
+				
+				# 'D' : Move front 5 seconds
+				elif (key == ord('d')):
+					offset = state['now'] + self.fps * 5
+				
+				# ',' : Move back frame
+				elif (key == ord(',')):
+					offset = state['now'] - 1
+				
+				# '.' : Move front frame
+				elif (key == ord('.')):
+					offset =  state['now'] + 1
+				else:
+					continue
+
+				offset = round(max(0, min(offset, self.total_frame - 1)))
+				state['now'] = offset
+				self.set_pos(offset)
+				
+				# Flush Frame after offset moved
+				frame = None;
+				caches.clear();
+
+		except KeyboardInterrupt:
+			cv2.destroyWindow(window_name);
 	
+		finally:
+			state['running'] = False;
+
+
+	# == to ==
+
+	def to_cv2_images(self):
+		frames = []
 		while (True):
-			ret, frame = video.read()
+			ret, frame = self.value.read()
 			if (ret == False):
 				break
+			frames.append(frame)
+		return frames
 
-			if (frame.shape != (height, width, 3)):
-				frame = cv2.resize(frame, (width, height))
-			
-			writer.write(frame)
+	def to_pil_image_list(self):
+		frames = []
+		while (True):
+			ret, frame = self.value.read()
+			if (ret == False):
+				break
+			frames.append(to_pil_image(frame))
+		return frames
+	
 
-		writer.release()
-		set_video_pos(video, orignal_pos)
+	# == write ==
 
-	video: None
-	if (type(object) == cv2.VideoCapture):
-		video = object
-	elif (type(object) == str):
-		video = cv2.VideoCapture(object)
-	else:
-		video = cv2.VideoCapture(ask_file([("Video files", "*.mp4 *.webm *.avi *.mov *.wmv *.flv"), ("All files", "*.*")]))
+	def write_mp4(self, output: str, fps: float, width: int, height: int):
+		def convert_thread(self: video_t, output: str, fps: float, width: int, height: int):
+			writer = cv2.VideoWriter(output, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
-	Thread(target = convert_thread, args = [video, output, fps, width, height]).start()
-	print("INFO: start writing " + output + " convertion!")
+			orignal_pos = self.pos;
+			self.set_pos(0)
+		
+			while (True):
+				ret, frame = self.value.read()
+				if (ret == False):
+					break
+
+				if (frame.shape != (height, width, 3)):
+					frame = cv2.resize(frame, (width, height))
+				
+				writer.write(frame)
+
+			writer.release()
+			self.set_pos(orignal_pos)
+
+
+		Thread(target = convert_thread, args = [self, output, fps, width, height]).start()
+		print("INFO: start writing " + output + " convertion!")
+
+	def write_gif(self, output: str, loop: int = 0):
+		def write_thread(self: video_t, output: str, loop: int):
+			frames = self.to_pil_image_list();
+			frames[0].save(output, save_all=True, append_images=frames[1:], duration=self.duration, loop=loop)
+
+		Thread(target = write_thread, args=[self, output, int(loop)]).start()
+		print(f"INFO: start writing {output}")
 
 
 
@@ -466,7 +481,7 @@ def load_cv2_image(object: str|None = None):
 
 
 
-def get_image_size(image) -> tuple[int, int]:
+def image_size(image) -> tuple[int, int]:
 	if (is_pil_image(image)):
 		return image.size
 
@@ -482,51 +497,59 @@ def show_image(file: str|None = None, window_name: str = "imshow"):
 
 # == GIF ==
 
-def write_gif(object: list|str, output: str, duration: int = 0, loop: int = 0):
-	# == convert object to pil_image list ==
+def write_gif(frames: list|str, output: str, fps: float = 0, loop: int = 0):
+	"""write_gif(frames, output, fps = 0, loop = 0)
 
-	frames = []
-	object_type = type(object)
+	@param frames: frames of GIF, could be below:
+		- video file (string)
+		- directory (string)
+		- list of PIL.Image or numpy.ndarray
+		- cv2.VideoCapture object
 
-	if (object_type == str and is_file(object)):
-		video = load_video(object)
-		frames = to_pil_image_list(video)
+	@param output: output file path (string)
+	@param fps: FPS, default read from video file or cv2.VideoCapture (float)
+	@param loop: how many times will GIF loop, default infinity (int)
+	"""
+	# == convert frames to pil_image list ==
 
-		if (duration == 0):
-			duration = get_video_duration(video)
-	
-	elif (object_type == str and is_dir(object)):
-		if (duration == 0):
-			raise TypeError("missing 1 required positional argument: 'duration'")
+	frames_final = []
+	object_type = type(frames)
+	duration = int(fps / 1000)
 
-		for file in os.listdir(object):
-			if (file.rsplit(os.extsep, 1)[1] not in ("png", "jpg", "jpeg")):
-				continue
-			
-			frames.append(pil_image.open(object + os.sep + file))
+	if (object_type == str):
+		if (is_file(frames)):
+			video_t(frames).write_gif(output, loop);
+			return;
+		
+		elif (is_dir(frames)):
+			if (duration == 0):
+				raise TypeError("missing 1 required positional argument: 'duration'")
 
-	elif (object_type == str):
-		raise FileNotFoundError(f"{object} not exist")
+			for file in os.listdir(frames):
+				if (file.rsplit(os.extsep, 1)[1] not in ("png", "jpg", "jpeg")):
+					continue
+				
+				frames_final.append(pil_image.open(frames + os.sep + file))
+
+		else:
+			raise FileNotFoundError(f"{frames} not exist")
 
 	elif (object_type == list):
 		if (duration == 0):
 			raise TypeError("missing 1 required positional argument: 'duration'")
 
-		for frame in object:
-			if (type(frame).__name__ == "numpy.ndarray"):
-				frames.append(to_pil_image(frame))
+		for frame in frames:
+			if (type(frame) == numpy.ndarray):
+				frames_final.append(to_pil_image(frame))
 				continue
 		
-			frames.append(frame)
+			frames_final.append(frame)
 
 	elif (object_type == cv2.VideoCapture):
-		if (duration == 0):
-			duration = get_video_duration(object)
-
-		frames = to_pil_image_list(object)
+		video_t(frames).write_gif();
 
 	else:
-		raise Exception(f"Invalid object type {object_type.__name__}")
+		raise Exception(f"Invalid frames type {object_type.__name__}")
 
 
 	# == write ==
@@ -534,7 +557,7 @@ def write_gif(object: list|str, output: str, duration: int = 0, loop: int = 0):
 	def write_gif_thread(output, frames, duration, loop):
 		frames[0].save(output, save_all=True, append_images=frames[1:], duration=duration, loop=loop)
 
-	Thread(target = write_gif_thread, args=[output, frames, int(duration), loop]).start()
+	Thread(target = write_gif_thread, args=[output, frames_final, int(duration), loop]).start()
 	print(f"INFO: start writing {output}")
 
 
@@ -705,7 +728,7 @@ class attendance_t:
 		output = "\x1b[1mDate\t\t\tStatus\t\tAttend Time\tLesson Time\tRoom\x1b[0m\n"
 		for row in self.rows:
 			if (row.status == "Absent"):
-				output += TERMCOLOR_RED + str(row) + "\x1b[0m"
+				output += "\033[31m" + str(row) + "\x1b[0m"
 			else:
 				output += str(row)
 		output += '\n'
@@ -767,14 +790,14 @@ class attendance_t:
 
 ##### Python Object #####
 
-def get_string_view_length(text: str) -> int:
+def string_visual_length(text: str) -> int:
 	length: int = 0
 	for char in text:
 		length += 1 + 1 - char.isascii()
 	return length
 
 
-def details(obj: any, language: str = "ja"):
+def object_details(obj: any, language: str = "ja"):
 	# == content ==
 
 	content = repr(obj)
@@ -823,7 +846,17 @@ def details(obj: any, language: str = "ja"):
 	print()
 
 
-def show_object_methods(obj: any, findname: str = None, show_content: bool = True, show_colors: bool = True):
+def object_methods(obj: any, findname: str = None, show_content: bool = True, show_colors: bool = True):
+	TERMCOLOR_CLEAR: str = "\033[0m"
+
+	TERMCOLOR_RED: str = "\033[31m"
+	TERMCOLOR_GREEN: str = "\033[32m"
+	TERMCOLOR_YELLOW: str = "\033[33m"
+	TERMCOLOR_BLUE: str = "\033[34m"
+
+	TERMCOLOR_BOLD: str = "\033[1m"
+	TERMCOLOR_GRAY: str = "\x1b[2m"
+
 	METHODCOLOURS = [
 		TERMCOLOR_GREEN,
 		TERMCOLOR_BOLD + TERMCOLOR_YELLOW,
@@ -956,7 +989,7 @@ def show_object_methods(obj: any, findname: str = None, show_content: bool = Tru
 				extend = " (" + repr(info[2]) + ")"
 			
 			# use expand display if indexLength enough
-			extendLength = get_string_view_length(extend)
+			extendLength = string_visual_length(extend)
 			if (length + extendLength < indexLength):
 				display_name += extend
 				length += extendLength
@@ -989,64 +1022,77 @@ def show_object_methods(obj: any, findname: str = None, show_content: bool = Tru
 
 # == pandas ==
 
-def load_dataframe(file: str = None, low_memory: bool|None = None):
-	if (file == None):
-		file = ask_file([("CSV files", "*.csv"), ("All files", "*.*")])
+class dataframe_t:
+	def __init__(self, source = None, low_memory: bool|None = None):
+		if (source == None):
+			source = ask_file([("All files", "*.*")])
+		
+		source_type = type(source);
 
-	# == loads ==
+		if (source_type == str):
+			file_type = os.path.splitext(source)[1];
 
-	file_type = file.rsplit(os.extsep, 1)[1]
+			if (file_type == "csv"):
+				self.value = pd.read_csv(source, low_memory = low_memory);
+				return;
 
-	if (file_type == "csv"):
-		return pd.read_csv(file, low_memory = low_memory)
+			if (file_type in ["xls", "xlsx"]):
+				self.value = pd.read_excel(source);
+				return;
 
-	if (file_type in ["xls", "xlsx"]):
-		return pd.read_excel(file)
+			if (file_type == "json"):
+				self.value = pd.read_json(source);
+				return;
 
-	if (file_type == "json"):
-		return pd.read_json(file)
-
-	if (file_type == "xml"):
-		return pd.read_xml(file)
-
-	print(f"ERROR: load_dataframe: Unsupported file type: {file_type}")
-
-
-
-
-def plot_hist(**args):
-	return plt.hist(**args)
-
-
-def plot_line(**args):
-	return plt.plot(**args)
-
-
-def plot_pie(**args):
-	return plt.pie(**args)
+			if (file_type == "xml"):
+				self.value = pd.read_xml(source);
+				return;
+			
+		print(f"error: {file_type} not supported");
+		self = None;
+			
+	def __getattr__(self, attr_name: str):
+		return getattr(self.value, attr_name);
 
 
-def plot_bar(**args):
-	return plt.bar(**args)
+	def plot_hist(self, X: str, Y: str, **args):
+		temp = [];
+		for idx in range(len(X)):
+			value = X[idx];
+
+			# X value as String: Convert to number
+			if (type(value) == str):
+				splited = value.split('-');
+				value = float(splited[0]);
+			
+				if (len(splited) > 1):
+					value = (value + float(splited[1])) / 2;
+			
+			# Add data to temp
+			temp += [value for i in range(Y[idx])];
+			
+		return plt.hist(temp, bins = self.value[X], **args);
+
+
+	def plot_scatter(self, X: str, Y: str, **args):
+		return plt.hist(self.value[Y], bins = self.value[X], **args);
+
+
+	def plot_line(self, X: str, Y: str, **args):
+		return plt.plot(self.value[Y], self.value[X], **args);
+
+
+	def plot_pie(self, labels: str, numbers: str, format: str = "%0.0f%%", **args):
+		return plt.pie(labels = self.value[labels], x = numbers, autopct = format, **args);
+
+
+	def plot_bar(self, X: str, Y: str, **args):
+		return plt.bar(self.value[Y], self.value[X], **args);
 
 
 
 
 
-
-
-
-# == old names ==
-
-write_images_to_gif = write_gif
-
-write_audio_to_mp3 = write_mp3
-
-list_object_methods = show_object_methods
-
-time_display = show_time_loop
-
-set_video_position = set_video_pos
 
 
 
@@ -1056,7 +1102,9 @@ set_video_position = set_video_pos
 __all__ = [
 	method for method in globals().keys()
 		if method not in [
-			"_io",
-			"clear_t", "chdir_t", "list_dir_t", "list_tree_t"
+			"_io", "Thread", "fnmatch"
+			"clear_t", "chdir_t", "listdir_t", "list_tree_t",
+
+			"time", "tkinter_filedialog", "translator"
 		] + lazy_import.registered
 ]
